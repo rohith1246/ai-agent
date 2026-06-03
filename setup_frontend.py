@@ -1,0 +1,160 @@
+import os
+
+os.makedirs("templates", exist_ok=True)
+
+html_code = '''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Rohi Research Agent</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f7fb;
+            display: flex;
+            justify-content: center;
+            padding: 40px;
+        }
+
+        .container {
+            background: white;
+            width: 100%;
+            max-width: 900px;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            margin-bottom: 10px;
+        }
+
+        p {
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 12px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            background: #0066cc;
+            color: white;
+        }
+
+        #preview {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            white-space: pre-wrap;
+            min-height: 150px;
+        }
+
+        .status {
+            margin-top: 15px;
+            color: #555;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>🤖 Rohi Research Agent</h1>
+
+    <p>
+        Enter any topic and generate a complete AI research report.
+    </p>
+
+    <input
+        id="topic"
+        type="text"
+        placeholder="Example: Artificial Intelligence in Healthcare"
+    >
+
+    <button onclick="generateReport()">
+        Generate Report
+    </button>
+
+    <div class="status" id="status"></div>
+
+    <div id="preview">
+        Report preview will appear here...
+    </div>
+
+</div>
+
+<script>
+
+async function generateReport() {
+
+    const topic =
+        document.getElementById("topic").value.trim();
+
+    if (!topic) {
+        alert("Please enter a topic.");
+        return;
+    }
+
+    document.getElementById("status").innerText =
+        "Researching...";
+
+    const response = await fetch("/research", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            topic: topic
+        })
+    });
+
+    const data = await response.json();
+
+    if (!data.success) {
+        document.getElementById("status").innerText =
+            data.error;
+        return;
+    }
+
+    document.getElementById("preview").innerText =
+        data.preview;
+
+    document.getElementById("status").innerText =
+        "Report generated. Download starting...";
+
+    window.location.href =
+        "/download/" + data.filename;
+}
+
+</script>
+
+</body>
+</html>
+'''
+
+with open("templates/index.html", "w", encoding="utf-8") as f:
+    f.write(html_code)
+
+print("templates/ folder created")
+print("templates/index.html created")
