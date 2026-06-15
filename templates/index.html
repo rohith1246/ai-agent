@@ -308,15 +308,15 @@
   <div class="results-header">
     <span class="results-label" id="resultsLabel">Report</span>
     <div class="dl-btns">
-      <a class="btn-dl" id="dlTxt" href="#" download>⬇ .txt</a>
-     <button class="btn-dl" onclick="downloadPDF()">⬇ PDF</button>
+      <a class="btn-dl" id="dlTxt" href="#" download style="display:none">⬇ .txt</a>
+      <button class="btn-dl" onclick="downloadPDF()">⬇ PDF</button>
     </div>
   </div>
   <div class="results-grid">
     <div class="report-card">
       <div class="report-tabs">
-        <button class="report-tab active" onclick="switchTab('fmt')">Report</button>
-        <button class="report-tab" onclick="switchTab('raw')">Raw</button>
+        <button class="report-tab active" data-tab="fmt" onclick="switchTab('fmt')">Report</button>
+        <button class="report-tab" data-tab="raw" onclick="switchTab('raw')">Raw</button>
       </div>
       <div class="report-body" id="reportFmt"></div>
       <div class="report-body" id="reportRaw" style="display:none;font-family:monospace;font-size:13px;"></div>
@@ -347,12 +347,13 @@
 <script>
   let selectedDepth = "quick";
   let stepTimers = [];
+  let lastReport = "";
+  let lastTopic = "";
 
-  // Depth timing config (ms) — matches backend behavior
   const DEPTH_TIMING = {
-    quick:  [0, 3000, 7000, 12000],
-    deep:   [0, 5000, 12000, 22000],
-    expert: [0, 8000, 20000, 38000],
+    quick:  [1, 3000, 7000, 12000],
+    deep:   [1, 5000, 12000, 22000],
+    expert: [1, 8000, 20000, 38000],
   };
 
   function setDepth(btn) {
@@ -361,8 +362,9 @@
     selectedDepth = btn.dataset.depth;
   }
 
+  // Fix #11: use textContent.trim() instead of innerText
   function setTopic(el) {
-    document.getElementById("topic").value = el.innerText;
+    document.getElementById("topic").value = el.textContent.trim();
     document.getElementById("topic").focus();
   }
 
@@ -373,62 +375,66 @@
     document.getElementById("btnText").textContent = on ? "Working…" : "Research";
   }
 
+  // Fix #6: use data-tab attribute instead of fragile index-based matching
   function switchTab(tab) {
-    const fmt = document.getElementById("reportFmt");
-    const raw = document.getElementById("reportRaw");
-    document.querySelectorAll(".report-tab").forEach((t, i) => {
-      t.classList.toggle("active", (i === 0 && tab === "fmt") || (i === 1 && tab === "raw"));
+    document.querySelectorAll(".report-tab").forEach(t => {
+      t.classList.toggle("active", t.dataset.tab === tab);
     });
-    fmt.style.display = tab === "fmt" ? "block" : "none";
-    raw.style.display = tab === "raw" ? "block" : "none";
+    document.getElementById("reportFmt").style.display = tab === "fmt" ? "block" : "none";
+    document.getElementById("reportRaw").style.display = tab === "raw" ? "block" : "none";
   }
 
   function clearSteps() {
     stepTimers.forEach(clearTimeout);
     stepTimers = [];
     [1,2,3,4].forEach(i => {
-      const el = document.getElementById("step" + i);
-      el.classList.remove("active", "done");
+      document.getElementById("step" + i).classList.remove("active", "done");
     });
   }
 
   function activateStep(n) {
-    const el = document.getElementById("step" + n);
-    // Mark previous as done
     if (n > 1) {
       document.getElementById("step" + (n-1)).classList.remove("active");
       document.getElementById("step" + (n-1)).classList.add("done");
     }
-    el.classList.add("active");
+    document.getElementById("step" + n).classList.add("active");
   }
 
   function completeAllSteps() {
     [1,2,3,4].forEach(i => {
-      const el = document.getElementById("step" + i);
-      el.classList.remove("active");
-      el.classList.add("done");
+      document.getElementById("step" + i).classList.remove("active");
+      document.getElementById("step" + i).classList.add("done");
     });
   }
 
+  // Fix #12: step 1 now uses 1ms minimum instead of 0 to avoid race condition
   function startProgressSteps(depth) {
     clearSteps();
     document.getElementById("progressPanel").style.display = "block";
     document.getElementById("results").style.display = "none";
-
     const timings = DEPTH_TIMING[depth] || DEPTH_TIMING.quick;
     [1,2,3,4].forEach((step, i) => {
-      const t = setTimeout(() => activateStep(step), timings[i]);
-      stepTimers.push(t);
+      stepTimers.push(setTimeout(() => activateStep(step), timings[i]));
     });
   }
 
-  function renderMarkdown(text) {
-    return text
-      .replace(/^## (.+)$/gm, '<strong style="font-size:15px;color:var(--yellow);display:block;margin-top:16px;margin-bottom:4px">$1</strong>')
-      .replace(/^### (.+)$/gm, '<strong style="color:#e6edf3;display:block;margin-top:10px">$1</strong>')
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/^[-•] (.+)$/gm, '&nbsp;&nbsp;• $1')
-      .replace(/\n/g, '<br>');
+  // Fix #10: sanitize all source fields before injecting into DOM
+  function escapeHTML(str) {
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function safeURL(url) {
+    try {
+      const u = new URL(url);
+      return (u.protocol === "https:" || u.protocol === "http:") ? u.href : "#";
+    } catch {
+      return "#";
+    }
   }
 
   function renderSources(sources) {
@@ -437,21 +443,48 @@
       el.innerHTML = '<div style="padding:14px 16px;color:var(--muted);font-size:13px">No sources returned.</div>';
       return;
     }
-    el.innerHTML = sources.map(s => `
-      <div class="source-item">
-        <div class="src-title"><a href="${s.url}" target="_blank" rel="noopener">${s.title}</a></div>
-        <div class="src-snippet">${s.snippet}</div>
-        <div class="src-url">${s.url}</div>
-      </div>
-    `).join("");
+    el.innerHTML = sources.map(s => {
+      const safeHref    = safeURL(s.url);
+      const safeTitle   = escapeHTML(s.title);
+      const safeSnippet = escapeHTML(s.snippet);
+      const safeUrlText = escapeHTML(s.url);
+      return `
+        <div class="source-item">
+          <div class="src-title"><a href="${safeHref}" target="_blank" rel="noopener noreferrer">${safeTitle}</a></div>
+          <div class="src-snippet">${safeSnippet}</div>
+          <div class="src-url">${safeUrlText}</div>
+        </div>`;
+    }).join("");
+  }
+
+  function showReport(report, filename, sources, topic) {
+    const html = report
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/^## (.+)$/gm, '<span style="font-size:15px;font-weight:700;color:var(--yellow);display:block;margin:18px 0 6px">$1</span>')
+      .replace(/^### (.+)$/gm, '<span style="font-weight:600;display:block;margin:10px 0 4px">$1</span>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/^[-•] (.+)$/gm, '<span style="display:block;padding-left:12px">• $1</span>')
+      .replace(/\n/g, "<br>");
+
+    document.getElementById("reportFmt").innerHTML = html;
+    document.getElementById("reportRaw").textContent = report;
+    renderSources(sources);
+
+    document.getElementById("resultsLabel").textContent = "Report: " + topic;
+
+    // Fix #9: show .txt link only once a report exists
+    const dlTxt = document.getElementById("dlTxt");
+    dlTxt.href = "/download/" + encodeURIComponent(filename);
+    dlTxt.style.display = "flex";
+
+    document.getElementById("progressPanel").style.display = "none";
+    document.getElementById("results").style.display = "block";
+    document.getElementById("results").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   async function generateReport() {
     const topic = document.getElementById("topic").value.trim();
-    if (!topic) {
-      document.getElementById("topic").focus();
-      return;
-    }
+    if (!topic) { document.getElementById("topic").focus(); return; }
 
     setLoading(true);
     startProgressSteps(selectedDepth);
@@ -460,10 +493,9 @@
       const res = await fetch("/research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic, depth: selectedDepth }),
+        body: JSON.stringify({ topic: topic, depth: selectedDepth }),
       });
 
-      if (!res.ok) throw new Error("Server error " + res.status);
       const data = await res.json();
 
       if (!data.success) {
@@ -473,114 +505,91 @@
         return;
       }
 
-      // Complete all steps
+      lastReport = data.report;
+      lastTopic  = topic;
+
       clearSteps();
       completeAllSteps();
 
-      // Small delay so user sees all steps green
-      setTimeout(() => {
-        document.getElementById("progressPanel").style.display = "none";
-
-        document.getElementById("reportFmt").innerHTML = renderMarkdown(data.report);
-        document.getElementById("reportRaw").textContent = data.report;
-        renderSources(data.sources);
-
-        document.getElementById("resultsLabel").textContent = `Report: ${topic}`;
-        document.getElementById("dlTxt").href = `/download/${data.filename}`;
-        document.getElementById("dlPdf").href = `/download-pdf/${data.filename}`;
-
-        document.getElementById("results").style.display = "block";
-        document.getElementById("results").scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 600);
+      setTimeout(() => showReport(data.report, data.filename, data.sources, topic), 500);
 
     } catch (err) {
       clearSteps();
       document.getElementById("progressPanel").style.display = "none";
-      alert("Request failed. Check your connection or server logs.");
-      console.error(err);
+      alert("Request failed: " + err.message);
     } finally {
       setLoading(false);
     }
   }
 
+  // Fix #7 & #8: replace window.open + document.write with Blob URL approach
+  function downloadPDF() {
+    if (!lastReport) { alert("Generate a report first."); return; }
+
+    const date = new Date().toLocaleDateString("en-US", { year:"numeric", month:"long", day:"numeric" });
+
+    const bodyHTML = lastReport
+      .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+      .split("\n").map(line => {
+        if (line.startsWith("## "))  return `<h2>${line.slice(3)}</h2>`;
+        if (line.startsWith("### ")) return `<h3>${line.slice(4)}</h3>`;
+        if (/^[-•] /.test(line))     return `<p class="b">• ${line.slice(2)}</p>`;
+        if (!line.trim())             return "<br>";
+        return `<p>${line.replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>")}</p>`;
+      }).join("");
+
+    const sourcesHTML = [...document.querySelectorAll(".source-item")].map((el,i) => {
+      const title = el.querySelector(".src-title a")?.textContent || "";
+      const url   = el.querySelector(".src-url")?.textContent || "";
+      return `<div class="src"><b>${i+1}. ${escapeHTML(title)}</b><br><span class="u">${escapeHTML(url)}</span></div>`;
+    }).join("");
+
+    const html = `<!DOCTYPE html><html><head>
+      <meta charset="UTF-8">
+      <title>${escapeHTML(lastTopic)}</title>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+      <style>
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:Inter,sans-serif;max-width:720px;margin:48px auto;color:#111;line-height:1.7;padding:0 24px}
+        .top{font-size:11px;color:#999;letter-spacing:.06em;text-transform:uppercase;margin-bottom:28px}
+        .top b{color:#b8860b}
+        h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin-bottom:6px}
+        .meta{font-size:13px;color:#666;padding-bottom:18px;margin-bottom:24px;border-bottom:2px solid #f0f0f0}
+        h2{font-size:14px;font-weight:700;color:#b8860b;text-transform:uppercase;letter-spacing:.04em;margin:24px 0 8px}
+        h3{font-size:14px;font-weight:600;margin:14px 0 5px}
+        p{font-size:14px;margin-bottom:7px}
+        p.b{padding-left:12px}
+        .srcs{margin-top:40px;padding-top:20px;border-top:1px solid #eee}
+        .src{margin-bottom:12px;font-size:13px}
+        .u{color:#4a7fc1;font-size:11px}
+        .foot{margin-top:48px;padding-top:14px;border-top:1px solid #f0f0f0;font-size:11px;color:#aaa;text-align:center}
+        @media print{body{margin:0}}
+      </style>
+    </head><body>
+      <div class="top"><b>AI Research Agent</b> · Rohith Builds Labs</div>
+      <h1>${escapeHTML(lastTopic)}</h1>
+      <div class="meta">Research Report &nbsp;·&nbsp; ${date}</div>
+      ${bodyHTML}
+      ${sourcesHTML ? `<div class="srcs"><h2>Sources</h2>${sourcesHTML}</div>` : ""}
+      <div class="foot">rohith-builds-labs.onrender.com</div>
+      <script>window.onload=()=>window.print()<\/script>
+    </body></html>`;
+
+    const blob = new Blob([html], { type: "text/html" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.target   = "_blank";
+    a.rel      = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+
   document.getElementById("topic").addEventListener("keydown", e => {
     if (e.key === "Enter") generateReport();
   });
-
-  function downloadPDF() {
-  const topic = document.getElementById("resultsLabel").textContent.replace("Report: ", "");
-  const reportText = document.getElementById("reportRaw").textContent;
-  const sources = [...document.querySelectorAll(".source-item")].map(el => ({
-    title: el.querySelector(".src-title a")?.textContent || "",
-    url:   el.querySelector(".src-url")?.textContent || "",
-  }));
-
-  const bodyHTML = reportText.split("\n").map(line => {
-    if (line.startsWith("## "))  return `<h2>${line.slice(3)}</h2>`;
-    if (line.startsWith("### ")) return `<h3>${line.slice(4)}</h3>`;
-    if (line.startsWith("- ") || line.startsWith("• ")) return `<p class="bullet">• ${line.slice(2)}</p>`;
-    if (!line.trim()) return "<br>";
-    return `<p>${line.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")}</p>`;
-  }).join("");
-
-  const sourcesHTML = sources.length ? `
-    <div class="sources">
-      <h2>Sources</h2>
-      ${sources.map((s, i) => `
-        <div class="source">
-          <span class="src-n">${i + 1}.</span>
-          <span class="src-t">${s.title}</span><br>
-          <span class="src-u">${s.url}</span>
-        </div>`).join("")}
-    </div>` : "";
-
-  const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>${topic} — Research Report</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Inter, sans-serif; max-width: 720px; margin: 48px auto; color: #111; line-height: 1.7; padding: 0 24px; }
-    .brand-bar { font-size: 11px; color: #999; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 28px; }
-    .brand-bar strong { color: #b8860b; }
-    h1 { font-size: 26px; font-weight: 700; letter-spacing: -.02em; margin-bottom: 6px; }
-    .meta { font-size: 13px; color: #666; padding-bottom: 20px; margin-bottom: 28px; border-bottom: 2px solid #f0f0f0; }
-    h2 { font-size: 15px; font-weight: 700; color: #b8860b; margin: 26px 0 8px; text-transform: uppercase; letter-spacing: .04em; }
-    h3 { font-size: 14px; font-weight: 600; margin: 16px 0 6px; }
-    p { font-size: 14px; margin-bottom: 8px; }
-    p.bullet { padding-left: 12px; }
-    strong { font-weight: 600; }
-    .sources { margin-top: 40px; padding-top: 24px; border-top: 1px solid #e5e5e5; }
-    .source { margin-bottom: 14px; font-size: 13px; }
-    .src-n { font-weight: 700; margin-right: 4px; }
-    .src-t { font-weight: 600; }
-    .src-u { color: #4a7fc1; font-size: 11px; }
-    .footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid #f0f0f0; font-size: 11px; color: #aaa; text-align: center; }
-    @media print {
-      body { margin: 0; }
-      .no-print { display: none; }
-    }
-  </style>
-</head>
-<body>
-  <div class="brand-bar"><strong>AI Research Agent</strong> · Rohith Builds Labs</div>
-  <h1>${topic}</h1>
-  <div class="meta">Research Report &nbsp;·&nbsp; ${date}</div>
-  ${bodyHTML}
-  ${sourcesHTML}
-  <div class="footer">Generated by AI Research Agent · rohith-builds-labs.onrender.com</div>
-  <script>window.onload = () => window.print();<\/script>
-</body>
-</html>`;
-
-  const win = window.open("", "_blank");
-  win.document.write(html);
-  win.document.close();
-}
 </script>
 </body>
 </html>

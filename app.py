@@ -1,10 +1,8 @@
-import io
 import os
 import logging
 from flask import Flask, request, jsonify, render_template, send_file
 from dotenv import load_dotenv
 from research_agent import research_agent, REPORTS_DIR
-from pdf_generator import generate_pdf
 
 load_dotenv()
 
@@ -56,9 +54,6 @@ def download_report(filename):
         return jsonify({"error": "Report not found."}), 404
 
     return send_file(filepath, as_attachment=True)
-
-
-
 
 
 if __name__ == "__main__":
