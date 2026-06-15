@@ -14,12 +14,18 @@ client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 REPORTS_DIR = os.path.join(os.path.dirname(__file__), "reports")
 os.makedirs(REPORTS_DIR, exist_ok=True)
 
+DEPTH_CONFIG = {
+    "quick":  {"max_results": 3,  "label": "Quick",  "detail": "concise and focused"},
+    "deep":   {"max_results": 8,  "label": "Deep",   "detail": "detailed and thorough"},
+    "expert": {"max_results": 12, "label": "Expert", "detail": "comprehensive, cite specific statistics and data points, include multiple perspectives"},
+}
 
-def search_web(query: str) -> str:
+
+def search_web(query: str, max_results: int = 5) -> str:
     """Search DuckDuckGo and return formatted results."""
     try:
         with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=5))
+            results = list(ddgs.text(query, max_results=max_results))
 
         if not results:
             return "No results found."
@@ -39,11 +45,11 @@ def search_web(query: str) -> str:
         return f"Search error: {str(e)}"
 
 
-def get_sources(query: str) -> list[dict]:
+def get_sources(query: str, max_results: int = 5) -> list[dict]:
     """Return structured source list for citations."""
     try:
         with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=5))
+            results = list(ddgs.text(query, max_results=max_results))
         return [
             {"title": r["title"], "url": r.get("href", "#"), "snippet": r["body"]}
             for r in results
@@ -53,23 +59,25 @@ def get_sources(query: str) -> list[dict]:
         return []
 
 
-def write_report(topic: str, search_results: str) -> str:
+def write_report(topic: str, search_results: str, depth: str = "quick") -> str:
     """Synthesize search results into a structured report via Groq."""
+    detail = DEPTH_CONFIG.get(depth, DEPTH_CONFIG["quick"])["detail"]
+
     prompt = f"""You are a professional research analyst.
 
-Based on the following search results about "{topic}", write a detailed research report.
+Based on the following search results about "{topic}", write a {detail} research report.
 
 Search Results:
 {search_results}
 
-Write the report with exactly these sections:
+Write the report with exactly these sections using ## headings:
 
 ## Overview
 ## Key Facts
 ## Latest Developments
 ## Conclusion
 
-Be clear, detailed, and professional. Use bullet points where appropriate."""
+Be professional. Use bullet points under Key Facts and Latest Developments."""
 
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -77,12 +85,12 @@ Be clear, detailed, and professional. Use bullet points where appropriate."""
         temperature=0.3,
     )
 
-    logger.info(f"Report generated for: {topic}")
+    logger.info(f"Report generated for: {topic} [{depth}]")
     return response.choices[0].message.content
 
 
 def save_report(topic: str, report: str) -> str:
-    """Save report to the reports/ directory. Returns filename (not full path)."""
+    """Save report to the reports/ directory. Returns filename only."""
     safe_name = "".join(c if c.isalnum() or c in "-_ " else "" for c in topic)
     filename = safe_name.lower().replace(" ", "-") + "-report.txt"
     filepath = os.path.join(REPORTS_DIR, filename)
@@ -96,17 +104,21 @@ def save_report(topic: str, report: str) -> str:
     return filename
 
 
-def research_agent(topic: str) -> dict:
+def research_agent(topic: str, depth: str = "quick") -> dict:
     """Full pipeline: search → synthesize → save. Returns report data."""
-    logger.info(f"Starting research: {topic}")
+    config = DEPTH_CONFIG.get(depth, DEPTH_CONFIG["quick"])
+    max_results = config["max_results"]
 
-    search_results = search_web(topic)
-    sources = get_sources(topic)
-    report = write_report(topic, search_results)
+    logger.info(f"Starting research: {topic} [{depth}, {max_results} results]")
+
+    search_results = search_web(topic, max_results=max_results)
+    sources = get_sources(topic, max_results=max_results)
+    report = write_report(topic, search_results, depth)
     filename = save_report(topic, report)
 
     return {
         "report": report,
         "filename": filename,
         "sources": sources,
+        "depth": depth,
     }
