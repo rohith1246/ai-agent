@@ -2,7 +2,7 @@
 
 > Autonomous AI agent that searches the web, synthesizes findings, and delivers structured research reports in seconds.
 
-**Built by [Rohith Builds Labs](https://rohith-builds-labs.onrender.com) · [Live Demo →](https://rohith-builds-labs.onrender.com)**
+**Built by [Rohith Builds Labs](https://rohith-builds-labs.onrender.com) · [Live Demo →](https://ai-research-agent-0765.onrender.com/)**
 
 ---
 
