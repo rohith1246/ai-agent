@@ -58,29 +58,7 @@ def download_report(filename):
     return send_file(filepath, as_attachment=True)
 
 
-@app.route("/download-pdf/<filename>")
-def download_pdf(filename):
-    safe_name = os.path.basename(filename)
-    txt_path = os.path.join(REPORTS_DIR, safe_name)
 
-    if not os.path.exists(txt_path):
-        return jsonify({"error": "Report not found."}), 404
-
-    with open(txt_path, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    topic = safe_name.replace("-report.txt", "").replace("-", " ").title()
-
-    # Re-fetch sources isn't stored — pass empty list for now
-    pdf_bytes = generate_pdf(topic, content, sources=[])
-    pdf_filename = safe_name.replace(".txt", ".pdf")
-
-    return send_file(
-        io.BytesIO(pdf_bytes),
-        as_attachment=True,
-        download_name=pdf_filename,
-        mimetype="application/pdf",
-    )
 
 
 if __name__ == "__main__":
