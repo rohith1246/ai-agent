@@ -101,9 +101,9 @@ def _call_groq(prompt: str) -> tuple[str, str]:
                     pass
 
             last_error = {
-                "model": model,
+                "model":      model,
                 "reset_hint": reset_hint,
-                "raw": error_body,
+                "raw":        error_body,
             }
 
             # Brief pause before trying next model to avoid hammering the API
@@ -134,23 +134,162 @@ def write_report(topic: str, search_results: str, depth: str = "quick") -> tuple
     Returns (report_text, model_used).
     """
     detail = DEPTH_CONFIG.get(depth, DEPTH_CONFIG["quick"])["detail"]
+    prompt = f"""
+You are a world-class multidisciplinary research analyst operating at the level of a senior policy
+advisor, investigative journalist, strategy consultant, and academic reviewer.
 
-    prompt = f"""You are a professional research analyst.
+Your mission: Produce a deeply researched, evidence-driven report on:
 
-Based on the following search results about "{topic}", write a {detail} research report.
+TOPIC: "{topic}"
 
-Search Results:
+INPUT SOURCES:
 {search_results}
 
-Write the report with exactly these sections using ## headings:
+RESEARCH OPERATING RULES
 
-## Overview
+1. SOURCE HANDLING
+   - Treat all search results as evidence, not truth
+   - Cross-check claims across sources before presenting them
+   - Weight sources by credibility:
+     1. Peer-reviewed research
+     2. Official institutions / government data
+     3. Primary company disclosures
+     4. Reputable journalism
+     5. Industry analysis
+     6. Secondary commentary
+   - Prefer newer sources unless historical context matters
+   - Never invent facts, timelines, numbers, quotations, or entities
+
+2. SYNTHESIS REQUIREMENT
+   - Do NOT summarize source-by-source
+   - Extract facts
+   - Group evidence into themes
+   - Compare viewpoints
+   - Identify patterns
+   - Explain implications
+   - Produce original synthesis
+
+3. UNCERTAINTY PROTOCOL
+   If evidence is incomplete:
+   → Output: Data unavailable
+   If evidence conflicts:
+   → Output: Sources disagree
+   Explain:
+   - what differs
+   - why it differs
+   - confidence level
+   Confidence Scale:
+   - High
+   - Medium
+   - Low
+
+4. ANALYTICAL STANDARD
+   For every major insight ask:
+   - What happened?
+   - Why does it matter?
+   - What changes next?
+   - Who gains?
+   - Who loses?
+   - What remains unknown?
+
+5. DATA PRIORITY
+   Prioritize:
+   - Hard numbers
+   - Dates
+   - Growth metrics
+   - Adoption figures
+   - Market sizes
+   - Named organizations
+   - People
+   - Studies
+   - Product launches
+   - Regulations
+   - Technical breakthroughs
+
+6. DEPTH MODE
+   Current depth: {detail}
+   Adjust automatically:
+   Brief:    → concise synthesis
+   Standard: → balanced explanation
+   Deep:     → mechanisms, context, comparisons
+   Expert:   → strategic implications and second-order effects
+
+7. STYLE REQUIREMENTS
+   - Precise
+   - Dense with information
+   - No repetition
+   - No motivational language
+   - No filler
+   - No exaggerated claims
+   - Direct and authoritative
+   - Explain complex ideas clearly
+
+OUTPUT FORMAT (Use EXACT headings)
+
+## Executive Summary
+3–5 sentences:
+- what this topic is
+- why it matters now
+- biggest takeaway
+
 ## Key Facts
+Bullet points only:
+- verified numbers
+- entities
+- market data
+- timelines
+- evidence-backed observations
+
 ## Latest Developments
+Bullet points only:
+- newest events
+- launches
+- regulations
+- partnerships
+- discoveries
+- trend shifts
+
+## Evidence Synthesis
+Group insights across sources.
+For each insight:
+- Insight
+- Supporting evidence
+- Confidence (High / Medium / Low)
+
+## Strategic Analysis
+Bullet points:
+- opportunities
+- risks
+- winners
+- disrupted actors
+- second-order effects
+
+## Contradictions & Unknowns
+Include only if applicable:
+- conflicting claims
+- missing data
+- unresolved questions
+
+## Forecast
+Predict only when evidence supports it. Include:
+- likely next developments
+- timelines
+- indicators to watch
+
 ## Conclusion
+3–5 sentences:
+- current reality
+- future trajectory
+- what matters most next
 
-Be professional. Use bullet points under Key Facts and Latest Developments."""
-
+FINAL VALIDATION CHECK
+✓ Every claim traceable to source input
+✓ No unsupported conclusions
+✓ Contradictions surfaced
+✓ Numbers preserved accurately
+✓ No hallucinated details
+✓ Publication-ready quality
+"""
     report, model_used = _call_groq(prompt)
     logger.info(f"Report generated for: {topic} [{depth}] using {model_used}")
     return report, model_used
